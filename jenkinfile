@@ -1,0 +1,126 @@
+pipeline{
+    agent any 
+    environment{
+        DOCKER_IMAGE = "shubhamdoc0705"
+        FRONTEND = "${DOCKER_IMAGE}/info-frontend"
+        BACKEND = "${DOCKER_IMAGE}/origin-backend"
+        VERSION = "v1.0.${BUILD_NUMBER}"
+    }
+    stages{
+        stage('Git-Checkout'){
+            steps{
+                git branch: 'release/dev', 
+                credentialsId: 'Git', 
+                url: 'https://github.com/Shub0705/employee-attendance-system.git'
+            }
+        }
+        stage('SONAR-SCAN'){
+            steps{
+                withSonarQubeEnv('sonarqube'){
+                     withEnv(["PATH+SONAR=${tool 'sonar-scanner'}/bin"]){
+                    sh '''
+                     sonar-scanner \
+                      -Dsonar.projectKey=my-project \
+                      -Dsonar.sources=. \
+                      -Dsonar.host.url=http://172.31.39.73:9000 \
+                      -Dsonar.login=$SONAR_AUTH_TOKEN
+                    '''
+                     }
+                }
+            }
+        }
+        stage('Quality Gate'){
+            steps{
+                timeout(time: 2, unit: 'MINUTES'){
+                    waitForQualityGate abortPipeline: true
+                }
+            }
+        }
+        stage('BUILD'){
+            parallel{
+                stage('FRONTEND'){
+                 steps{
+                     dir('frontend'){
+                    sh '''
+                    docker build -t ${FRONTEND}:${VERSION} .
+                    docker tag ${FRONTEND}:${VERSION} ${FRONTEND}:latest
+                    '''
+                 }
+              }
+                }
+                stage('BACKEND'){
+                  steps{
+                      dir('backend'){
+                      sh '''
+                      docker build -t ${BACKEND}:${VERSION} .
+                      docker tag ${BACKEND}:${VERSION} ${BACKEND}:latest
+                      '''
+                      }
+                  }
+                  }
+              }
+        }
+        stage('TRIVY-SCAN'){
+            parallel{
+                stage('FRONTEND'){
+                steps{
+                    sh '''
+                    trivy image --severity HIGH,CRITICAL --exit-code 1 --ignore-unfixed ${FRONTEND}:${VERSION}
+                    '''
+                }
+            }
+            stage('BACKEND'){
+                steps{
+                    sh '''
+                    trivy image --severity HIGH,CRITICAL --exit-code 0 --ignore-unfixed ${BACKEND}:${VERSION}
+                    '''
+                }
+            }
+           }
+        }
+        stage('PUSH_DOCKER'){
+            steps{
+                withCredentials([usernamePassword(
+                    credentialsId: 'Docker',
+                    usernameVariable: 'DOCKER_USER',
+                    passwordVariable: 'DOCKER_PASS'
+                    )]){
+                     sh '''
+                     echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                     docker push ${FRONTEND}:${VERSION}
+                     docker push ${FRONTEND}:latest
+                     
+                     docker push ${BACKEND}:${VERSION}
+                     docker push ${BACKEND}:latest
+                     
+                     docker logout
+                     '''
+                    }
+             }
+        }
+        stage('DEPLOY'){
+            steps{
+                dir('k8s'){
+                 sh '''
+                 kubectl set image deployment/employe-frontend  \
+                 employe-f=${FRONTEND}:${VERSION} -n job 
+                
+                 kubectl set image deployment/employe-backend \
+                 employee-b=${BACKEND}:${VERSION} -n job
+                 
+                 kubectl rollout status deployment/employe-frontend -n job
+                 kubectl rollout status deployment/employe-backend -n job
+                 '''
+                }
+            }
+        }
+    }
+        post{
+            success {
+                echo "BUILD SUCCESSFUL"
+            }
+            failure {
+                echo "BUILD FAIL"
+            }
+        }
+}

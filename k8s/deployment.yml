@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: info
+  namespace: job
+  labels:
+    global: logic
+spec:
+  replicas: 1
+  selector: 
+    matchLabels:
+      global: logic
+  template:
+    metadata:
+      name: info
+      labels:
+        global: logic
+    spec:
+      containers:
+        - name: origin
+          image: shubhamdoc0705/frontend:latest
+          ports:
+           - containerPort: 80
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kodak
+  namespace: job
+  labels:
+    global: logic-b
+spec: 
+  replicas: 1
+  selector:
+    matchLabels:
+      global: logic-b
+  template:
+    metadata:
+      name: kodak
+      labels:
+        global: logic-b
+    spec: 
+      containers:
+        - name: tv
+          image: shubhamdoc0705/backend:latest
+          ports:
+            - containerPort: 5000

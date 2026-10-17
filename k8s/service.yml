@@ -1,0 +1,27 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: employe-frontend
+  namespace: job
+spec:
+  selector:
+    global: logic
+  ports:
+   - protocol: TCP
+     port: 80
+     targetPort: 80
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: employe-bacend
+  namespace: job
+spec:
+  selector:
+    global: logic-b
+  ports:
+   - protocol: TCP
+     port: 5000
+     targetPort: 5000
